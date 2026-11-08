@@ -2,6 +2,8 @@
 #include <iostream>
 #include <string>
 #include <algorithm>
+#include <fstream>
+#include <limits>
 using namespace std;
 
 struct Student {
@@ -31,26 +33,20 @@ int getBalance(Student* n) {
 Student* rightRotate(Student* y) {
     Student* x = y->left;
     Student* t = x->right;
-
     x->right = y;
     y->left = t;
-
     y->height = 1 + max(height(y->left), height(y->right));
     x->height = 1 + max(height(x->left), height(x->right));
-
     return x;
 }
 
 Student* leftRotate(Student* x) {
     Student* y = x->right;
     Student* t = y->left;
-
     y->left = x;
     x->right = t;
-
     x->height = 1 + max(height(x->left), height(x->right));
     y->height = 1 + max(height(y->left), height(y->right));
-
     return y;
 }
 
@@ -58,7 +54,6 @@ Student* balanceTree(Student* root) {
     if (!root) return root;
 
     root->height = 1 + max(height(root->left), height(root->right));
-
     int b = getBalance(root);
 
     if (b > 1 && getBalance(root->left) >= 0)
@@ -87,10 +82,8 @@ Student* insert(Student* root, int r, string n, float m) {
         root->left = insert(root->left, r, n, m);
     else if (r > root->rollNo)
         root->right = insert(root->right, r, n, m);
-    else {
-        cout << "Roll number already exists!\n";
+    else
         return root;
-    }
 
     return balanceTree(root);
 }
@@ -106,12 +99,9 @@ Student* search(Student* root, int r) {
 }
 
 Student* minValueNode(Student* root) {
-    Student* current = root;
-
-    while (current->left)
-        current = current->left;
-
-    return current;
+    while (root->left)
+        root = root->left;
+    return root;
 }
 
 Student* deleteStudent(Student* root, int r) {
@@ -119,10 +109,8 @@ Student* deleteStudent(Student* root, int r) {
 
     if (r < root->rollNo)
         root->left = deleteStudent(root->left, r);
-
     else if (r > root->rollNo)
         root->right = deleteStudent(root->right, r);
-
     else {
         if (!root->left || !root->right) {
             Student* temp = root->left ? root->left : root->right;
@@ -131,15 +119,81 @@ Student* deleteStudent(Student* root, int r) {
         }
 
         Student* temp = minValueNode(root->right);
-
         root->rollNo = temp->rollNo;
         root->name = temp->name;
         root->marks = temp->marks;
-
         root->right = deleteStudent(root->right, temp->rollNo);
     }
 
     return balanceTree(root);
+}
+
+void display(Student* root) {
+    if (!root) return;
+
+    display(root->left);
+
+    cout << "Roll No: " << root->rollNo
+         << " | Name: " << root->name
+         << " | Marks: " << root->marks << endl;
+
+    display(root->right);
+}
+
+void saveToFile(Student* root, ofstream& file) {
+    if (!root) return;
+
+    saveToFile(root->left, file);
+
+    file << root->rollNo << '\n';
+    file << root->name << '\n';
+    file << root->marks << '\n';
+
+    saveToFile(root->right, file);
+}
+
+void saveRecords(Student* root) {
+    ofstream file("students.txt");
+
+    if (!file) {
+        cout << "Unable to save records!\n";
+        return;
+    }
+
+    saveToFile(root, file);
+    file.close();
+    cout << "Records saved successfully!\n";
+}
+
+Student* loadRecords(Student* root) {
+    ifstream file("students.txt");
+
+    if (!file) {
+        cout << "No previous records found.\n";
+        return root;
+    }
+
+    int roll;
+    float marks;
+    string name;
+
+    while (file >> roll) {
+        file.ignore(numeric_limits<streamsize>::max(), '\n');
+
+        if (!getline(file, name)) break;
+        if (!(file >> marks)) break;
+
+        file.ignore(numeric_limits<streamsize>::max(), '\n');
+
+        if (search(root, roll))
+            continue;
+
+        root = insert(root, roll, name, marks);
+    }
+
+    file.close();
+    cout << "Records loaded successfully!\n";
+    return root;
 }
 
 void updateStudent(Student* root, int r) {
@@ -159,21 +213,8 @@ void updateStudent(Student* root, int r) {
     cout << "Student updated successfully!\n";
 }
 
-void display(Student* root) {
-    if (!root) return;
-
-    display(root->left);
-
-    cout << "Roll No: " << root->rollNo
-         << " | Name: " << root->name
-         << " | Marks: " << root->marks << endl;
-
-    display(root->right);
-}
-
 void freeTree(Student* root) {
     if (!root) return;
-
     freeTree(root->left);
     freeTree(root->right);
     delete root;
@@ -185,6 +226,8 @@ int main() {
     string name;
     float marks;
 
+    root = loadRecords(root);
+
     do {
         cout << "\n===== STUDENT MANAGEMENT SYSTEM =====\n";
         cout << "1. Add Student\n";
@@ -195,12 +238,21 @@ int main() {
         cout << "6. Exit\n";
 
         cout << "Enter your choice: ";
-        cin >> choice;
+
+        if (!(cin >> choice)) {
+            cout << "Invalid input!\n";
+            break;
+        }
 
         switch (choice) {
             case 1:
                 cout << "Enter Roll Number: ";
                 cin >> roll;
+
+                if (search(root, roll)) {
+                    cout << "Roll number already exists!\n";
+                    break;
+                }
 
                 cout << "Enter Name: ";
                 getline(cin >> ws, name);
@@ -208,7 +260,13 @@ int main() {
                 cout << "Enter Marks: ";
                 cin >> marks;
 
+                if (marks < 0 || marks > 100) {
+                    cout << "Marks must be between 0 and 100!\n";
+                    break;
+                }
+
                 root = insert(root, roll, name, marks);
+                saveRecords(root);
                 break;
 
             case 2: {
@@ -222,14 +280,19 @@ int main() {
                          << " | Marks: " << s->marks << endl;
                 else
                     cout << "Student not found!\n";
-
                 break;
             }
 
             case 3:
                 cout << "Enter Roll Number: ";
                 cin >> roll;
-                updateStudent(root, roll);
+
+                if (search(root, roll)) {
+                    updateStudent(root, roll);
+                    saveRecords(root);
+                } else {
+                    cout << "Student not found!\n";
+                }
                 break;
 
             case 4:
@@ -238,6 +301,7 @@ int main() {
 
                 if (search(root, roll)) {
                     root = deleteStudent(root, roll);
+                    saveRecords(root);
                     cout << "Student deleted successfully!\n";
                 } else {
                     cout << "Student not found!\n";
